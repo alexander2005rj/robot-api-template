@@ -1,0 +1,46 @@
+name: Full Tests Executions
+
+run-name: Tests Execution API
+
+on:
+  schedule:
+    - cron: "0 13,19,20 * * 1-5"
+
+  workflow_call:
+    secrets:
+      PAT:
+        required: true
+      VAULT_ROLE_ID:
+        required: true
+      VAULT_SECRET_ID:
+        required: true
+
+  workflow_dispatch:
+    inputs:
+      threads:
+        type: choice
+        description: How many threads do you want to execute?
+        options:
+          - 1
+          - 2
+        required: false
+        default: 1
+      tag:
+        description: Which tag would you like to run? For more than one tag, use "option1ORoption2". To run all tests, leave blank.
+        required: false
+
+jobs:
+  tests-api-backend:
+    if: sucess()
+    uses: /.github/workflows/workflow-api-robotframework.yml
+    secrets:
+      PAT: ${{ secrets.PAT }}
+      VAULT_ROLE_ID: ${{ secrets.VAULT_ROLE_ID }}
+      VAULT_SECRET_ID: ${{ secrets.VAULT_SECRET_ID }}
+    with:
+      test_repository: robot-api-template
+      tests_path: /tests/specs
+      tag: ${{ input.tag }}
+      threads: ${{ input.threads || 1 }}
+      extra_arguments: --listener \"${{ github.event_name == 'pull_request' && '' }};${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }};end_suite;summary\"
+      context: "backend_api_tests"

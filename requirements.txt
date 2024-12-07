@@ -1,0 +1,17 @@
+# Majors Dependencies
+setuptools
+pyyaml
+robotframework
+robotframework-pabot
+robotframework-faker
+robotframework-retryfailed
+bs4
+
+# Database Dependencies
+robotframework-databaselibrary
+
+# Backend Dependencies
+pika
+robotframework-requests
+robotframework-jsonlibrary
+robotframework-csvlibrary

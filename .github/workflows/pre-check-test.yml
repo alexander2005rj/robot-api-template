@@ -1,0 +1,22 @@
+name: Pre-check E2E API tests
+
+run-name: Tests Execution E2E Backend
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  pre-check-tests:
+    uses: /.github/workflows/workflow-api-robotframework.yml
+    secrets:
+      PAT: ${{ secrets.PAT }}
+      VAULT_ROLE_ID: ${{ secrets.VAULT_ROLE_ID }}
+      VAULT_SECRET_ID: ${{ secrets.VAULT_SECRET_ID }}
+    with:
+      test_repository: robot-api-template
+      tests_path: /tests/specs
+      threads: 1
+      extra_arguments: --listener \"${{ github.event_name == 'pull_request' && '' }};${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }};end_suite;summary\"
+      context: "backend_api_tests"

@@ -1,0 +1,154 @@
+name: Robot Framework API Tests Workflow
+
+on:
+  workflow_call:
+    secrets:
+      PAT:
+        required: true
+      VAULT_ROLE_ID:
+        required: true
+      VAULT_SECRET_ID:
+        required: true
+    inputs:
+      TEST_REPOSITORY:
+        required: false
+        type: string
+        default: ${{ github.repository }}
+      TEST_PATH:
+        required: false
+        type: string
+        default: /api
+      TAG:
+        required: false
+        type: string
+      THREADS:
+        required: false
+        type: string
+        default: "1"
+      RETRY:
+        required: false
+        type: boolean
+        default: false
+      EXTRA_ARGUMENTS:
+        required: false
+        type: string
+      REQUIREMENTS_FILE:
+        required: false
+        type: string
+        default: "requirements.txt"
+      CONTEXT:
+        required: false
+        type: string
+        default: ""
+
+env:
+  output_name: api-tests-reports
+  output_path: ${{ github.workspace }}/api-tests-reports
+  console_width: ${{ 180 }}
+  full_tests_path: ${{ github.workspace }}${{ inputs.tests_path }}
+
+jobs:
+  api-tests:
+    runs-on: [put-image-runner-here]
+    outputs:
+      rf-run-command: ${{ steps.set-run-commands.output.rf-run-command }}
+      rf-rerun-command: ${{ steps.set-run-commands.output.rf-rerun-command }}
+    steps:
+      - name: Checkout Test Repository
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ inputs.test_repository }}
+          token: ${{ secrets.PAT }}
+
+      - name: Staging Environment Variables
+        id: staging-env-vars
+        uses: raven-actions/environment-variables@v2
+        with:
+          BRANCH: ${{ env.GITHUB_REF_NAME }}
+          ENV: hml
+          PAT: ${{ secrets.PAT }}
+          VAULT_ROLE_ID: ${{ secrets.VAULT_ROLE_ID }}
+          VAULT_SECRET_ID: ${{ secrets.VAULT_SECRET_ID }}
+          CONTEXT: ${{ inputs.CONTEXT }}
+          CHOICE: true
+          SECRETS: ${{  }}
+
+      - name: Replace SettingsFile Variables
+        run: cat ${{ github.workflows }}/.github/templates/settings.yaml | envsubst > ${{ github.workspace }}/settings.yaml
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Set Robot Framework Execution Command
+        id: steps.set-run-commands
+        run: |
+          if [ '${{ inputs.threads }}' = '1' ]
+          then
+            base_command="robot"
+          else
+            base_command="pabot --testlevelsplit --processes ${{ inputs.thread }}"
+          fi
+          options_command="-W ${{ env.console_width }} -L debug -d ${{ env.output_path }} ${{ inputs.extra_arguments }}"
+          if [ -n "${{ inputs.tag }}" ]
+          then
+            echo "rf-run-command=$base_command $options_command -i ${{ inputs.tag }} ${{ env.full_tests_path }}" >> $GITHUB_OUTPUT
+          else
+            echo "rf-run-command=$base_command $options_command ${{ env.full_tests_path }}" >> $GITHUB_OUTPUT
+          fi
+          echo "rf-run-command=$base_command $options_command --rerunfailed ${{ env.output_path }}/output.xml -o rerun.xml ${{ env.full_tests_path }}" >> $GITHUB_OUTPUT
+
+      - name: Run Robot Framework API Tests
+        id: run-tests
+        run: |
+          ${{ steps.set-run-commands.output.rf-run-command }}
+
+      - name: Rerun Robot Framework API Failed Tests
+        id: rerun-tests
+        run: |
+          bash /.github/scripts/rerun-rf-failed-tests.sh "${{ steps.set-run-commands.output.rf-rerun-command }}"
+        shell: bash
+
+      - name: Check if any tests were skipped and fail
+        id: check-skipped
+        if: always()
+        run: |
+          skipped_tests=$(grep -c '<status status="SKIP"' ${{ env.output_path }}/output.xml || echo 0)
+          echo "Total Skipped Words Count: $skipped_tests"
+
+          if [ -n "$skipped_tests"] && [ "$skipped_tests" -ne 0 ]
+          then
+            echo "::error title=Skipped Tests::The step failed because some test was skipped!"
+            exit 1
+          fi
+        shell: bash
+
+      - name: Set artifact name
+        if: always()
+        run: echo "artifact_name=${{ env.output_name }}-$(date + '%Y-%m-%d-%H-%M-%S')" >> $GITHUB_ENV
+
+      - name: Upload Tests Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.artifact_name }}
+          path: |
+            */log.html
+            */report.html
+          if-no-files-found: ignore
+          retention-days: 2
+
+      - name: Download Tests Results
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.artifact_name }}
+
+      - name: Send report to commit
+        if: always()
+        uses: joonvena/robotframework-reporter-action@v2.5
+        with:
+          report_path: ${{ env.output_name }}
+          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
+          show_passed_tests: false

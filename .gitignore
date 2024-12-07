@@ -1,0 +1,27 @@
+# Editor
+.vscode/
+.DS_Store
+
+# Python
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+.venv
+
+# Robot Framework
+browser/
+results/
+reports/
+api-tests-reports/
+tracing/
+*.html
+*.xml
+*.webm
+*.zip
+*.png
+*.csv
+.pabotsuitenames
+
+# Local configuration
+/settings.yaml
